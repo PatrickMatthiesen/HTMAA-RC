@@ -1,12 +1,13 @@
 #include "BluetoothController.h"
+#include <ESP32Servo.h>
 
 // Motor control pins
 const int motorPin1 = 18; // A-1A
 const int motorPin2 = 19; // A-1B
 
 // PWM channels for ESP32
-const int motorChannel1 = 0;
-const int motorChannel2 = 1;
+const int motorChannel1 = 2; // I think channel 0 is being used by the servo, and that messes stuff up
+const int motorChannel2 = 3;
 const int pwmFreq = 1000;
 const int pwmResolution = 8;
 
@@ -15,14 +16,27 @@ int motorSpeed = 0;
 bool motorDirection = true; // true = forward, false = reverse
 
 // Throttle control parameters
-const int MIN_MOTOR_PWM = 100;  // Minimum PWM to overcome friction
+const int MIN_MOTOR_PWM = 0;  // Minimum PWM to overcome friction
 const float THROTTLE_CURVE = 1.8;  // Exponential curve factor
+
+// Steering servo
+Servo servo;
+const int steeringPin = 13; // Pin for steering servo
+const int steeringMin = 30; // Minimum angle for steering
+const int steeringMax = 180 - steeringMin; // Maximum angle for steering
 
 void setup() {
   Serial.begin(115200);
+
+  // Allow allocation of all timers - Something from the servo examples
+	ESP32PWM::allocateTimer(0);
+	ESP32PWM::allocateTimer(1);
+	ESP32PWM::allocateTimer(2);
+	ESP32PWM::allocateTimer(3);
   
   // Initialize Bluetooth controller
   bluetoothController.begin();
+  
   
   // Setup PWM for motor control
   // We need to use ledc functions for ESP32
@@ -31,7 +45,13 @@ void setup() {
   ledcSetup(motorChannel2, pwmFreq, pwmResolution);
   ledcAttachPin(motorPin1, motorChannel1);
   ledcAttachPin(motorPin2, motorChannel2);
-  
+
+
+  // Initialize steering servo
+  // servo.setPeriodHertz(50);      // Standard 50hz servo
+  int channel = servo.attach(steeringPin);
+  Serial.println("Steering servo initialized on channel " + String(channel));
+
   Serial.println("RC Car initialized. Waiting for controller connection...");
 }
 
@@ -43,9 +63,11 @@ void loop() {
     // Get controller input
     int throttle = bluetoothController.getThrottle();      // 0-1023
     int leftStickY = bluetoothController.getLeftStickY();  // -511 to 512
+    int leftStickX = bluetoothController.getLeftStickX();  // -511 to 512
     
     // Calculate motor speed with exponential curve
-    motorSpeed = mapThrottleExponential(throttle);
+    motorSpeed = map(throttle, 0, 1023, MIN_MOTOR_PWM, 255);
+    int motorSpeedTest = mapThrottleExponential(throttle);
     
     // Determine direction based on left stick Y axis
     if (leftStickY > 100) {
@@ -61,12 +83,17 @@ void loop() {
     
     // Apply motor control
     controlMotor(motorSpeed, motorDirection);
-    
+
+    // Map left stick X to steering angle
+    int angle = map(leftStickX, -511, 512, steeringMin, steeringMax);
+    // Set steering servo position
+    servo.write(angle);
+
     // Debug output
     static unsigned long lastDebug = 0;
     if (millis() - lastDebug > 500) {
-      Serial.printf("Throttle: %d, LeftY: %d, Speed: %d, Dir: %s\n", 
-                    throttle, leftStickY, motorSpeed, motorDirection ? "Forward" : "Reverse");
+      Serial.printf("Throttle: %d, LeftX: %d, LeftY: %d, Speed: %d, MotorSpeedTest: %d, Dir: %s, Angle: %d\n",
+                    throttle, leftStickX, leftStickY, motorSpeed, motorSpeedTest, motorDirection ? "Forward" : "Reverse", angle);
       lastDebug = millis();
     }
   } else {
@@ -87,6 +114,7 @@ void loop() {
 int mapThrottleExponential(int throttle) {
   if (throttle == 0) return 0;
   if (throttle < 30) return 0;  // Small dead zone
+  if (throttle > 1023) throttle = 1023; // Clamp to max value
   
   // Normalize throttle to 0-1
   float normalized = (float)(throttle - 30) / (1023.0 - 30.0);
