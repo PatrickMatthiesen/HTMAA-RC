@@ -1,5 +1,7 @@
 #include "BluetoothController.h"
+#include "BuzzerPlayer.h"
 #include <ESP32Servo.h>
+#include <Arduino.h>
 
 // Motor control pins
 const int motorPin1 = 18; // A-1A
@@ -25,6 +27,14 @@ const int steeringPin = 13; // Pin for steering servo
 const int steeringMin = 30; // Minimum angle for steering
 const int steeringMax = 180 - steeringMin; // Maximum angle for steering
 
+// Buzzer
+const int buzzerPin = 12; // Pin for buzzer
+const int buzzerChannel = 4; // Buzzer channel for ESP32
+const int buzzerFreq = 1000; // Frequency for buzzer
+PresetMelody buzzerMelody = PresetMelody::MELODY_NONE; // Default melody to play
+
+BuzzerPlayer buzzer(buzzerPin, buzzerChannel);
+
 void setup() {
   Serial.begin(115200);
 
@@ -33,10 +43,9 @@ void setup() {
 	ESP32PWM::allocateTimer(1);
 	ESP32PWM::allocateTimer(2);
 	ESP32PWM::allocateTimer(3);
-  
+
   // Initialize Bluetooth controller
   bluetoothController.begin();
-  
   
   // Setup PWM for motor control
   // We need to use ledc functions for ESP32
@@ -46,11 +55,11 @@ void setup() {
   ledcAttachPin(motorPin1, motorChannel1);
   ledcAttachPin(motorPin2, motorChannel2);
 
-
   // Initialize steering servo
   // servo.setPeriodHertz(50);      // Standard 50hz servo
   int channel = servo.attach(steeringPin);
   Serial.println("Steering servo initialized on channel " + String(channel));
+
 
   Serial.println("RC Car initialized. Waiting for controller connection...");
 }
@@ -65,6 +74,19 @@ void loop() {
     int leftStickY = bluetoothController.getLeftStickY();  // -511 to 512
     int leftStickX = bluetoothController.getLeftStickX();  // -511 to 512
     
+    bluetoothController.dumpGamepads();
+
+    int dpad = bluetoothController.getDpad();
+    bool leftDpad = (dpad & DPAD_LEFT) != 0;
+    bool rightDpad = (dpad & DPAD_RIGHT) != 0;
+
+    Serial.print("Left D-Pad: ");
+    Serial.print(leftDpad ? "Pressed" : "Not Pressed");
+    Serial.print(", Right D-Pad: ");
+    Serial.println(rightDpad ? "Pressed" : "Not Pressed");
+    // Change buzzer melody if D-pad buttons are pressed
+    changeBuzzerMelody(leftDpad, rightDpad);
+
     // Calculate motor speed with exponential curve
     motorSpeed = map(throttle, 0, 1023, MIN_MOTOR_PWM, 255);
     int motorSpeedTest = mapThrottleExponential(throttle);
@@ -142,4 +164,22 @@ void controlMotor(int speed, bool direction) {
     ledcWrite(motorChannel1, 0);
     ledcWrite(motorChannel2, speed);
   }
+}
+
+void changeBuzzerMelody(bool leftDpad, bool rightDpad) {
+  if (leftDpad && rightDpad) {
+    buzzer.playPresetMelody(MELODY_NONE); // Stop playing melody
+    Serial.println("Buzzer stopped.");
+    return;
+  } else if (leftDpad) {
+    buzzerMelody = static_cast<PresetMelody>((buzzerMelody - 1) % (MELODY_BEEP_ERROR + 1));
+  } else if (rightDpad) {
+    buzzerMelody = static_cast<PresetMelody>((buzzerMelody + 1) % (MELODY_BEEP_ERROR + 1));
+  } else {
+    buzzer.update(); // Just update the buzzer state if no buttons pressed
+    return;
+  }
+
+  buzzer.playPresetMelody(buzzerMelody);
+  Serial.println("Changed buzzer melody to: " + String(static_cast<int>(buzzerMelody)));
 }

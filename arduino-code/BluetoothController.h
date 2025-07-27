@@ -25,9 +25,10 @@ public:
     int getLeftStickY();         // Returns left stick Y axis (-511 to 512)
     int getLeftStickX();         // Returns left stick X axis (-511 to 512)
     bool isButtonPressed(int button);
+    int getDpad();
     
     // Debug functions
-    void dumpGamepad(ControllerPtr ctl);
+    void dumpGamepads();
 };
 
 // Global instance declaration
