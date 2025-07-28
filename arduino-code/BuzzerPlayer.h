@@ -111,6 +111,7 @@ enum PresetMelody
     MELODY_HAPPY_BIRTHDAY,
     MELODY_STAR_WARS,
     MELODY_BEEP_SUCCESS,
+    MELODY_BEEP_WARNING,
     MELODY_BEEP_ERROR
 };
 
@@ -138,6 +139,7 @@ private:
     std::vector<Note> getHappyBirthdayMelody();
     std::vector<Note> getStarWarsMelody();
     std::vector<Note> getSuccessBeep();
+    std::vector<Note> getWarningBeep();
     std::vector<Note> getErrorBeep();
 
 public:

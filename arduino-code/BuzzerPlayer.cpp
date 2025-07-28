@@ -125,9 +125,9 @@ std::vector<Note> BuzzerPlayer::getMarioMelody()
 {
     return {
         // Main theme
-        {NOTE_E5, 150}, {NOTE_E5, 150}, {NOTE_REST, 150}, {NOTE_E5, 150}, {NOTE_REST, 150}, {NOTE_C5, 150}, {NOTE_E5, 150}, {NOTE_REST, 150}, {NOTE_G5, 150}, {NOTE_REST, 450}, {NOTE_G4, 150}, {NOTE_REST, 450},
-        {NOTE_C5, 300}, {NOTE_REST, 150}, {NOTE_G4, 300}, {NOTE_REST, 150}, {NOTE_E4, 300}, {NOTE_REST, 150}, {NOTE_A4, 150}, {NOTE_B4, 150}, {NOTE_AS4, 150}, {NOTE_A4, 300},
-        {NOTE_G4, 150}, {NOTE_E5, 150}, {NOTE_G5, 150}, {NOTE_A5, 300}, {NOTE_F5, 150}, {NOTE_G5, 150}, {NOTE_REST, 150}, {NOTE_E5, 300}, {NOTE_C5, 150}, {NOTE_D5, 150}, {NOTE_B4, 300}, {NOTE_REST, 150}
+        {NOTE_E5, 200}, {NOTE_E5, 200}, {NOTE_REST, 200}, {NOTE_E5, 200}, {NOTE_REST, 200}, {NOTE_C5, 200}, {NOTE_E5, 200}, {NOTE_REST, 200}, {NOTE_G5, 200}, {NOTE_REST, 600}, {NOTE_G4, 200}, {NOTE_REST, 600},
+        {NOTE_C5, 400}, {NOTE_REST, 200}, {NOTE_G4, 400}, {NOTE_REST, 200}, {NOTE_E4, 400}, {NOTE_REST, 200}, {NOTE_A4, 200}, {NOTE_B4, 200}, {NOTE_AS4, 200}, {NOTE_A4, 400},
+        {NOTE_G4, 200}, {NOTE_E5, 200}, {NOTE_G5, 200}, {NOTE_A5, 400}, {NOTE_F5, 200}, {NOTE_G5, 200}, {NOTE_REST, 200}, {NOTE_E5, 400}, {NOTE_C5, 200}, {NOTE_D5, 200}, {NOTE_B4, 400}, {NOTE_REST, 200}
     };
 }
 
@@ -165,6 +165,12 @@ std::vector<Note> BuzzerPlayer::getSuccessBeep()
 {
     return {
         {NOTE_C5, 150}, {NOTE_E5, 150}, {NOTE_G5, 300}};
+}
+
+std::vector<Note> BuzzerPlayer::getWarningBeep()
+{
+    return {
+        {NOTE_E4, 200}, {NOTE_G4, 200}, {NOTE_B4, 200}, {NOTE_E5, 200}, {NOTE_G5, 200}, {NOTE_B5, 200}};
 }
 
 std::vector<Note> BuzzerPlayer::getErrorBeep()
