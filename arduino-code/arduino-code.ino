@@ -94,6 +94,7 @@ void setup() {
 
 
   Serial.println("RC Car initialized. Waiting for controller connection...");
+  buzzer.playPresetMelody(MELODY_BEEP_SUCCESS); // Play startup melody
 }
 
 void loop() {
@@ -103,6 +104,7 @@ void loop() {
   if (!bluetoothController.isControllerConnected()) {
     // No controller connected, stop motor
     controlMotor(0, true);
+    buzzer.update();
     
     static unsigned long lastMessage = 0;
     if (millis() - lastMessage > 3000) {
@@ -159,18 +161,20 @@ void loop() {
   } else if ((motorDirection && (forwardDistance < WARNING_DISTANCE)) 
           || (!motorDirection && (backDistance < WARNING_DISTANCE))) {
     if (millis() - lastDebug > 500) {
-      buzzer.playPresetMelody(MELODY_BEEP_WARNING); // Play warning sound
+      // buzzer.playPresetMelody(MELODY_BEEP_WARNING); // Play warning sound
       Serial.println("Obstacle detected! Warning sound played.");
     }
   }
 
   // Override motor control if collision detected
   if (collisionDetected && collisionEnabled) {
-    Serial.print(collisionDirection == 'F' ? "Forward" : "Reverse");
-    Serial.println(" collision detected! Stopping motor.");
+    if (millis() - lastDebug > 500) {
+      Serial.print(collisionDirection == 'F' ? "Forward" : "Reverse");
+      Serial.println(" collision detected! Stopping motor.");
+      buzzer.playPresetMelody(MELODY_BEEP_ERROR); // Play error sound
+    }
 
     controlMotor(0, true); // Stop motor
-    buzzer.playPresetMelody(MELODY_BEEP_ERROR); // Play warning sound
   } else {
     controlMotor(motorSpeed, motorDirection);
   }
@@ -180,7 +184,7 @@ void loop() {
   if (abs(leftStickX) < steeringDeadzone) {
     leftStickX = 0; // Deadzone for steering
   }
-  int angle = map(leftStickX, -511, 512, steeringMin, steeringMax);
+  int angle = map(leftStickX, -511, 512, steeringMax, steeringMin);
   // Set steering servo position
   servo.write(angle);
 
