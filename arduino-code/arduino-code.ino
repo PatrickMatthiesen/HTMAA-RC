@@ -5,12 +5,14 @@
 #include <esp32-hal-gpio.h>
 
 // Motor control pins
-const int motorPin1 = 18; // A-1A
-const int motorPin2 = 19; // A-1B
+const int motorPin1 = 25; // A-1A // 18
+const int motorPin2 = 33; // A-1B // 19
+const int enablePin = 32; // A-ENA // 23
 
 // PWM channels for ESP32
-const int motorChannel1 = 2; // I think channel 0 is being used by the servo, and that messes stuff up
-const int motorChannel2 = 3;
+// const int motorChannel1 = 2; // I think channel 0 is being used by the servo, and that messes stuff up
+// const int motorChannel2 = 3;
+const int motorPwmChannel = 2; // Channel for motor pin 1
 const int pwmFreq = 1000;
 const int pwmResolution = 8;
 
@@ -19,13 +21,12 @@ int motorSpeed = 0;
 bool motorDirection = true; // true = forward, false = reverse
 
 // Throttle control parameters
-const int MIN_MOTOR_PWM = 0;  // Minimum PWM to overcome friction
-const float THROTTLE_CURVE = 1.8;  // Exponential curve factor
+const int MIN_MOTOR_PWM = 150;  // Minimum PWM to overcome friction
 
 // Steering servo
 Servo servo;
 const int steeringPin = 13; // Pin for steering servo
-const int steeringMin = 30; // Minimum angle for steering
+const int steeringMin = 50; // Minimum angle for steering
 const int steeringMax = 180 - steeringMin; // Maximum angle for steering
 const int steeringDeadzone = 80; // Deadzone for incorrect controller input
 
@@ -40,17 +41,21 @@ BuzzerPlayer buzzer(buzzerPin, buzzerChannel);
 // Ultra-sonic sensors
 const int forwardTrig = 5;
 const int forwardEcho = 17;
-const int leftTrig = 16;
-const int leftEcho = 15;
+const int leftTrig = 0; // 0
+const int leftEcho = 2; // 2
 const int rightTrig = 14;
-const int rightEcho = 4;
-const int backTrig = 2;
-const int backEcho = 0;
+const int rightEcho = 27;
+const int backTrig = 16;
+const int backEcho = 4;
 
 // Collision avoidance parameters
 const float COLLISION_DISTANCE = 15.0; // Stop if obstacle within 15cm
 const float WARNING_DISTANCE = 25.0;   // Warn if obstacle within 25cm
 const int COLLISION_TIMEOUT = 10000; // Collision detection timeout in ms (about 1m range)
+int collisionEnabled = 1; // Enable collision detection by default
+
+// debug variables
+static unsigned long lastDebug = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -67,10 +72,10 @@ void setup() {
   // Setup PWM for motor control
   // We need to use ledc functions for ESP32
   // Because ESP32 does not support analogWrite like Arduino
-  ledcSetup(motorChannel1, pwmFreq, pwmResolution);
-  ledcSetup(motorChannel2, pwmFreq, pwmResolution);
-  ledcAttachPin(motorPin1, motorChannel1);
-  ledcAttachPin(motorPin2, motorChannel2);
+  pinMode(motorPin1, OUTPUT);
+  pinMode(motorPin2, OUTPUT);
+  ledcSetup(motorPwmChannel, pwmFreq, pwmResolution);
+  ledcAttachPin(enablePin, motorPwmChannel);
 
   // Initialize Ultra-sonic sensors
   pinMode(forwardTrig, OUTPUT);
@@ -112,12 +117,18 @@ void loop() {
   int throttle = bluetoothController.getThrottle();      // 0-1023
   int leftStickY = bluetoothController.getLeftStickY();  // -511 to 512
   int leftStickX = bluetoothController.getLeftStickX();  // -511 to 512
-  
-  // Change buzzer melody if D-pad buttons are pressed
-  updateBuzzerMelody();
+  int dpad = bluetoothController.getDpad();
 
-  // Calculate motor speed with exponential curve
-  motorSpeed = map(throttle, 0, 1023, MIN_MOTOR_PWM, 255);
+  // Change buzzer melody if D-pad buttons are pressed
+  updateBuzzerMelody(dpad);
+
+  if (bluetoothController.isButtonPressed(BUTTON_A)) {
+    collisionEnabled = !collisionEnabled; // Toggle collision detection
+    Serial.println("Collision detection " + String(collisionEnabled ? "enabled" : "disabled"));
+  }
+
+  // Calculate motor speed based on throttle
+  motorSpeed = throttle == 0 ? 0 : map(throttle, 0, 1023, MIN_MOTOR_PWM, 255);
   
   // Determine direction based on left stick Y axis
   if (leftStickY < -50) {
@@ -138,20 +149,26 @@ void loop() {
   float backDistance = readUltrasonicDistance(backTrig, backEcho);
 
   bool collisionDetected = false;
+  char collisionDirection = -1;
   if (motorDirection && (forwardDistance < COLLISION_DISTANCE)) {
     collisionDetected = true;
-    Serial.println("Forward collision detected! Stopping.");
+    collisionDirection = 'F';
   } else if (!motorDirection && (backDistance < COLLISION_DISTANCE)) {
     collisionDetected = true;
-    Serial.println("Reverse collision detected! Stopping.");
+    collisionDirection = 'B';
   } else if ((motorDirection && (forwardDistance < WARNING_DISTANCE)) 
           || (!motorDirection && (backDistance < WARNING_DISTANCE))) {
-    buzzer.playPresetMelody(MELODY_BEEP_WARNING); // Play warning sound
-    Serial.println("Obstacle detected! Warning sound played.");
+    if (millis() - lastDebug > 500) {
+      buzzer.playPresetMelody(MELODY_BEEP_WARNING); // Play warning sound
+      Serial.println("Obstacle detected! Warning sound played.");
+    }
   }
 
   // Override motor control if collision detected
-  if (collisionDetected) {
+  if (collisionDetected && collisionEnabled) {
+    Serial.print(collisionDirection == 'F' ? "Forward" : "Reverse");
+    Serial.println(" collision detected! Stopping motor.");
+
     controlMotor(0, true); // Stop motor
     buzzer.playPresetMelody(MELODY_BEEP_ERROR); // Play warning sound
   } else {
@@ -168,10 +185,9 @@ void loop() {
   servo.write(angle);
 
   // Debug output
-  static unsigned long lastDebug = 0;
   if (millis() - lastDebug > 500) {
-    Serial.printf("Throttle: %d, LeftX: %d, LeftY: %d, Speed: %d, Dir: %s, Angle: %d\n",
-                  throttle, leftStickX, leftStickY, motorSpeed, motorDirection ? "Forward" : "Reverse", angle);
+    Serial.printf("\nThrottle: %d, LeftX: %d, LeftY: %d, Speed: %d, Dir: %s, Collision: %s, Angle: %d\n",
+                  throttle, leftStickX, leftStickY, motorSpeed, motorDirection ? "Forward" : "Reverse", collisionDetected ? "Yes" : "No", angle);
     Serial.printf("Distances - Forward: %.2f cm, Left: %.2f cm, Right: %.2f cm, Back: %.2f cm\n",
                   forwardDistance, leftDistance, rightDistance, backDistance);
 
@@ -188,21 +204,23 @@ void loop() {
 void controlMotor(int speed, bool direction) {
   if (speed == 0) {
     // Stop motor
-    ledcWrite(motorChannel1, 0);
-    ledcWrite(motorChannel2, 0);
+    ledcWrite(motorPwmChannel, 0); // Set PWM to 0
+    digitalWrite(motorPin1, LOW);
+    digitalWrite(motorPin2, LOW);
   } else if (direction) {
     // Forward
-    ledcWrite(motorChannel1, speed);
-    ledcWrite(motorChannel2, 0);
+    ledcWrite(motorPwmChannel, speed); // Set PWM to speed
+    digitalWrite(motorPin1, HIGH);
+    digitalWrite(motorPin2, LOW);
   } else {
     // Reverse
-    ledcWrite(motorChannel1, 0);
-    ledcWrite(motorChannel2, speed);
+    ledcWrite(motorPwmChannel, speed); // Set PWM to speed
+    digitalWrite(motorPin1, LOW);
+    digitalWrite(motorPin2, HIGH);
   }
 }
 
-void updateBuzzerMelody() {
-  int dpad = bluetoothController.getDpad();
+void updateBuzzerMelody(int dpad) {
   bool leftDpad = (dpad & DPAD_LEFT) != 0;
   bool rightDpad = (dpad & DPAD_RIGHT) != 0;
 
